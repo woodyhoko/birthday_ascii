@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Happy Birthday — ASCII 3D</title>
+<style>
+  html,body{margin:0;height:100%;background:#05060a;overflow:hidden}
+  body{display:flex;align-items:center;justify-content:center;font-family:"Cascadia Code","Consolas",monospace}
+  #scene{text-align:center}
+  #art{font-size:11px;line-height:11px;letter-spacing:0;white-space:pre;margin:0;user-select:none;text-shadow:0 0 5px currentColor}
+  #msg{margin-top:16px;font-size:clamp(20px,4vw,38px);font-weight:700;background:linear-gradient(90deg,#ff5f6d,#ffc371,#5ffbf1,#c79bff,#ff5f6d);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+  @keyframes shine{to{background-position:300% 0}}
+  #sub{color:#6b7390;font-family:system-ui,sans-serif;font-size:12px;margin-top:5px}
+  canvas#cf{position:fixed;inset:0;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="cf"></canvas>
+<div id="scene">
+  <pre id="art"></pre>
+  <div id="msg">Happy Birthday!</div>
+  <div id="sub">click anywhere for confetti</div>
+</div>
+<script>
+// Spinning torus rendered as ASCII with z-buffer + per-column colour
+const art=document.getElementById('art');
+const COLS=88,ROWS=42;
+const RAMP=" .`-_':,;^=+/\"|)\\<>)iv%xclrs{},?JTLunz2IfCeot1a3kr6v85w9mG#&@";
+let A=0,B=0;
+function render(){
+  const N=COLS*ROWS,ch=new Array(N).fill(' '),zb=new Float32Array(N),hue=new Float32Array(N);
+  const cA=Math.cos(A),sA=Math.sin(A),cB=Math.cos(B),sB=Math.sin(B);
+  for(let theta=0;theta<6.283;theta+=0.055){
+    const ct=Math.cos(theta),st=Math.sin(theta);
+    for(let phi=0;phi<6.283;phi+=0.013){
+      const cp=Math.cos(phi),sp=Math.sin(phi);
+      const R1=1,R2=2.1,cx=R2+R1*ct;
+      const x0=cx*cp,y0=cx*sp,z0=R1*st;
+      const y1=y0*cA-z0*sA,z1=y0*sA+z0*cA;
+      const x2=x0*cB-y1*sB,y2=x0*sB+y1*cB,z2=z1;
+      const ooz=1/(z2+6);
+      const xp=((COLS/2)+25*ooz*x2)|0,yp=((ROWS/2)-12*ooz*y2)|0;
+      if(xp<0||xp>=COLS||yp<0||yp>=ROWS)continue;
+      const idx=xp+yp*COLS;if(ooz<=zb[idx])continue;
+      const nx=ct*cp,ny=ct*sp,nz=st;
+      const nyr=ny*cA-nz*sA,nzr=ny*sA+nz*cA;
+      const nxr=nx*cB-nyr*sB,nyrr=nx*sB+nyr*cB;
+      let lum=.55*nyrr+.55*nzr+.3*nxr;lum=Math.max(0,lum);
+      zb[idx]=ooz;ch[idx]=RAMP[Math.min(RAMP.length-1,(lum*(RAMP.length-1))|0)];
+      hue[idx]=((y0+3)*60+theta*28)%360;
+    }
+  }
+  // candle flame pixels
+  const fx=(COLS/2)|0;
+  for(let i=0;i<18;i++){const px=fx+((Math.random()*5-2)|0),py=4+((Math.random()*4)|0);if(px>=0&&px<COLS&&py>=0){const id=px+py*COLS;ch[id]=Math.random()<.5?'*':'^';hue[id]=40+Math.random()*18;zb[id]=99;}}
+  let html='';
+  for(let y=0;y<ROWS;y++){
+    for(let x=0;x<COLS;x++){const id=x+y*COLS,c=ch[id];if(c===' '){html+=' ';continue;}const isFlame=zb[id]===99;html+=`<span style="color:hsl(${hue[id]},${isFlame?100:65}%,${isFlame?60:52}%)">${c}</span>`;}
+    html+='\n';
+  }
+  art.innerHTML=html;A+=0.034;B+=0.017;requestAnimationFrame(render);
+}
+render();
+
+// Confetti
+const cf=document.getElementById('cf'),cc=cf.getContext('2d');
+function rs(){cf.width=innerWidth;cf.height=innerHeight;}addEventListener('resize',rs);rs();
+let bits=[];
+function burst(x,y){const cols=['#ff5f6d','#ffc371','#5ffbf1','#c79bff','#9bffb0','#ffd166'];for(let i=0;i<130;i++)bits.push({x,y,vx:(Math.random()*2-1)*7,vy:Math.random()*-9-2,g:.28+Math.random()*.12,s:3+Math.random()*4,c:cols[(Math.random()*cols.length)|0],r:Math.random()*6,life:130});}
+function tick(){cc.clearRect(0,0,cf.width,cf.height);bits=bits.filter(b=>b.life-->0);for(const b of bits){b.vy+=b.g;b.x+=b.vx;b.y+=b.vy;b.r+=.18;cc.save();cc.translate(b.x,b.y);cc.rotate(b.r);cc.fillStyle=b.c;cc.globalAlpha=Math.max(0,b.life/130);cc.fillRect(-b.s/2,-b.s/2,b.s,b.s*1.6);cc.restore();}cc.globalAlpha=1;requestAnimationFrame(tick);}
+tick();
+addEventListener('click',e=>burst(e.clientX,e.clientY));
+setTimeout(()=>burst(innerWidth/2,innerHeight*.45),500);
+setInterval(()=>burst(Math.random()*innerWidth,innerHeight*.3),2800);
+</script>
+</body>
+</html>
