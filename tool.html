@@ -308,7 +308,7 @@
     function find_pic(){
     $(document).ready(function(){
 
-        $.getJSON("http://api.flickr.com/services/feeds/photos_public.gne?jsoncallback=?",
+        $.getJSON("https://api.flickr.com/services/feeds/photos_public.gne?jsoncallback=?",
         {
             tags: keyword,
             tagmode: "any",
@@ -320,6 +320,7 @@
             random_img = image_src;
 
             var imgori = document.getElementById('ori')
+            imgori.crossOrigin = 'anonymous'
             imgori.src = random_img
             imgori.style.display = 'block'
             document.getElementById('ori_placeholder').style.display = 'none'
@@ -378,8 +379,8 @@
       var eo = document.getElementById('empty_output'); if(eo) eo.style.display = 'none'
       render()
     }
-    img.src = random_img//'https://picsum.photos/200/300'
     img.crossOrigin = 'anonymous';
+    img.src = random_img//'https://picsum.photos/200/300'
     img.complete ? onImgLoaded() : (img.onload = onImgLoaded)
 
     var imageData
