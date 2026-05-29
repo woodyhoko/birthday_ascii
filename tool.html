@@ -52,7 +52,7 @@
         .wrap{
             position:relative;
             z-index:1;
-            max-width:1080px;
+            max-width:1100px;
             margin:0 auto;
             padding:48px 24px 80px;
         }
@@ -199,20 +199,36 @@
         #ori{display:block;max-width:100%;max-height:320px;border-radius:10px}
         .preview-box .placeholder{color:var(--muted);font-size:13px;padding:32px;text-align:center}
 
+        .result-head{
+            display:flex;align-items:center;justify-content:space-between;
+            margin-bottom:12px;
+        }
+        .result-head .small{font-size:11px;color:var(--muted);letter-spacing:.04em}
+
         .output-shell{
             background:#fbfbfd;
             border-radius:14px;
             padding:18px;
             overflow:auto;
-            max-height:520px;
+            max-height:560px;
             display:flex;justify-content:center;
         }
-        canvas#ascii-canvas{display:block;margin:auto;max-width:100%}
+        .result{display:none;flex-direction:column;gap:18px;align-items:center;width:100%}
+        canvas#ascii-canvas{display:block;margin:0 auto;max-width:100%;image-rendering:pixelated;border-radius:6px}
+
+        .raw-divider{
+            width:100%;border-top:1px dashed #d7d9e2;padding-top:14px;
+            font-family:"JetBrains Mono",monospace;font-size:11px;color:#9aa0b4;text-align:center;
+        }
         #rawtext{
-            display:none; /* canvas is the rendered result; raw text kept for reference */
-            white-space:pre-line;
-            font-size:12px;
-            transform:scale(1,.7);
+            display:block;
+            white-space:pre;
+            font-family:"JetBrains Mono","Consolas",monospace;
+            font-size:7px;
+            line-height:7px;
+            letter-spacing:0;
+            color:#15161c;
+            margin:0 auto;
         }
 
         .empty-output{
@@ -280,11 +296,17 @@
             </section>
 
             <section class="card">
-                <h2>ASCII result</h2>
+                <div class="result-head">
+                    <h2 style="margin:0">ASCII result</h2>
+                    <span class="small">colour render + raw characters</span>
+                </div>
                 <div class="output-shell">
                     <span class="empty-output" id="empty_output">Your ASCII art will appear here after baking.</span>
-                    <canvas id="ascii-canvas" style="display:none"></canvas>
-                    <tt id="rawtext"></tt>
+                    <div class="result" id="result">
+                        <canvas id="ascii-canvas"></canvas>
+                        <div class="raw-divider">— raw character version —</div>
+                        <tt id="rawtext"></tt>
+                    </div>
                 </div>
             </section>
         </div>
@@ -324,8 +346,6 @@
             imgori.src = random_img
             imgori.style.display = 'block'
             document.getElementById('ori_placeholder').style.display = 'none'
-
-            //$('body').css('background-image', "url('" + image_src + "')");
         });
     });}
 
@@ -336,8 +356,6 @@
       link.click();
     }
 
-
-
     document.getElementById("download_but").addEventListener("click", () =>{
         download();
    });
@@ -347,82 +365,87 @@
    });
 
     document.getElementById("clickButton").addEventListener("click", () =>{
-        console.log(document.getElementById("readTheInput").value);
         abc(document.getElementById("readTheInput").value);
    });
 
     function abc(elechar) {
-    // canvas 实现
-    var offScreenCvs = document.createElement('canvas')
-    var offScreenCtx = offScreenCvs.getContext('2d', { alpha: false })
-    var asciiCvs = document.getElementById('ascii-canvas')
-    var asciiCtx = asciiCvs.getContext('2d', { alpha: false })
-    var offScreenCvsWidth, offScreenCvsHeight, asciiCvsWidth, asciiCvsHeight
-    var fontSize = 4
-    var samplerStep = 2
-
-
-
-    var img = new Image()
-    var onImgLoaded = function () {
-      offScreenCvsWidth = img.width
-      offScreenCvsHeight = img.height
-      offScreenCvs.width = offScreenCvsWidth
-      offScreenCvs.height = offScreenCvsHeight
-      offScreenCtx.drawImage(img, 0, 0, offScreenCvsWidth, offScreenCvsHeight)
-      imageData = offScreenCtx.getImageData(0, 0, offScreenCvsWidth, offScreenCvsHeight)
-      asciiCvsWidth = offScreenCvsWidth / samplerStep * fontSize
-      asciiCvsHeight = (offScreenCvsHeight / samplerStep + 1) * fontSize
-      asciiCvs.width = asciiCvsWidth
-      asciiCvs.height = asciiCvsHeight
-      asciiCvs.style.display = 'block'
-      var eo = document.getElementById('empty_output'); if(eo) eo.style.display = 'none'
-      render()
-    }
-    img.crossOrigin = 'anonymous';
-    img.src = random_img//'https://picsum.photos/200/300'
-    img.complete ? onImgLoaded() : (img.onload = onImgLoaded)
-
-    var imageData
-    var x, y, _x, _y, pos
-    var r, g, b
-    var asciiCharArray = elechar.split('')
-    var durationPerChar = Math.ceil(255 / asciiCharArray.length)
-
-    function render () {
-      var imageDataContent = imageData.data
-      var part1, part2
-      var letter
-      var value
-      asciiCtx.fillStyle = '#ffffff'
-      asciiCtx.fillRect(0, 0, asciiCvsWidth, asciiCvsHeight)
-      asciiCtx.fillStyle = '#000000'
-      asciiCtx.font = fontSize + 'px SimHei'
-      var temp;
-      temp = "";
-      for (y = 0, _y = 0; y < offScreenCvsHeight; y += samplerStep, _y++) {
-        for (x = 0, _x = 0; x < offScreenCvsWidth; x += samplerStep, _x++) {
-          pos = y * offScreenCvsWidth + x
-          r = imageDataContent[pos * 4]
-          g = imageDataContent[pos * 4 + 1]
-          b = imageDataContent[pos * 4 + 2]
-          value = r * 0.3086 + g * 0.6094 + b * 0.0820
-          imageDataContent[pos * 4] = imageDataContent[pos * 4 + 1] = imageDataContent[pos * 4 + 2] = value
-
-          part1 = Math.floor(value / durationPerChar)
-          part2 = value % durationPerChar
-          letter = part2 ? asciiCharArray[part1] : (part1 ? asciiCharArray[part1 - 1] : 'æ')
-
-          asciiCtx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')'
-          asciiCtx.fillText(letter, _x * fontSize, (_y + 1) * fontSize)
-          temp+=letter;
-        }
-        temp+='\n';
+      var asciiCharArray = elechar.split('');
+      if (asciiCharArray.length === 0) return;
+      if (!random_img) {
+        var eo0 = document.getElementById('empty_output');
+        if (eo0) { eo0.style.display = 'block'; eo0.textContent = 'Find a cake first, then bake it.'; }
+        return;
       }
-      document.getElementById("rawtext").textContent=temp;
-      //console.log(temp);
+
+      var asciiCvs = document.getElementById('ascii-canvas');
+      var asciiCtx = asciiCvs.getContext('2d', { alpha: false });
+      var offScreenCvs = document.createElement('canvas');
+      var offScreenCtx = offScreenCvs.getContext('2d', { alpha: false });
+
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      var onImgLoaded = function () {
+        var iw = img.width, ih = img.height;
+        if (!iw || !ih) return;
+
+        offScreenCvs.width = iw;
+        offScreenCvs.height = ih;
+        offScreenCtx.drawImage(img, 0, 0, iw, ih);
+        var data = offScreenCtx.getImageData(0, 0, iw, ih).data;
+
+        // Downsample to a readable character grid (independent of source size).
+        var targetCols = 150;
+        var stepX = Math.max(1, Math.round(iw / targetCols));
+        var stepY = Math.max(1, Math.round(stepX * 2)); // character cells are ~2x taller than wide
+
+        // Canvas sized for a crisp colour PNG.
+        var fontSize = 10;
+        var charW = fontSize * 0.6;
+        var cols = Math.ceil(iw / stepX);
+        var rows = Math.ceil(ih / stepY);
+        asciiCvs.width = Math.ceil(cols * charW);
+        asciiCvs.height = Math.ceil(rows * fontSize);
+        asciiCtx.fillStyle = '#ffffff';
+        asciiCtx.fillRect(0, 0, asciiCvs.width, asciiCvs.height);
+        asciiCtx.font = fontSize + 'px "JetBrains Mono", "Consolas", monospace';
+        asciiCtx.textBaseline = 'top';
+
+        var durationPerChar = Math.ceil(255 / asciiCharArray.length);
+        var temp = '';
+
+        for (var y = 0, _y = 0; y < ih; y += stepY, _y++) {
+          for (var x = 0, _x = 0; x < iw; x += stepX, _x++) {
+            var pos = (y * iw + x) * 4;
+            var r = data[pos], g = data[pos + 1], b = data[pos + 2];
+            var value = r * 0.3086 + g * 0.6094 + b * 0.0820;
+
+            var part1 = Math.floor(value / durationPerChar);
+            var part2 = value % durationPerChar;
+            var letter = part2 ? asciiCharArray[part1] : (part1 ? asciiCharArray[part1 - 1] : asciiCharArray[0]);
+            if (letter === undefined) letter = asciiCharArray[asciiCharArray.length - 1];
+
+            asciiCtx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+            asciiCtx.fillText(letter, _x * charW, _y * fontSize);
+            temp += letter;
+          }
+          temp += '\n';
+        }
+
+        document.getElementById('rawtext').textContent = temp;
+        document.getElementById('result').style.display = 'flex';
+        var eo = document.getElementById('empty_output');
+        if (eo) eo.style.display = 'none';
+      };
+
+      img.onload = onImgLoaded;
+      img.onerror = function () {
+        var eo = document.getElementById('empty_output');
+        if (eo) { eo.style.display = 'block'; eo.textContent = 'Could not load that image (CORS or network). Try “Find a cake” again.'; }
+      };
+      img.src = random_img;
+      if (img.complete && img.naturalWidth) onImgLoaded();
     }
-  }
 </script>
 </body>
 </html>

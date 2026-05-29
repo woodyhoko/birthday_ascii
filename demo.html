@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Happy Birthday — ASCII 3D</title>
+<title>Happy Birthday — ASCII 3D Cake</title>
 <style>
   html,body{margin:0;height:100%;background:#05060a;overflow:hidden}
   body{display:flex;align-items:center;justify-content:center;font-family:"Cascadia Code","Consolas",monospace}
   #scene{text-align:center}
-  #art{font-size:11px;line-height:11px;letter-spacing:0;white-space:pre;margin:0;user-select:none;text-shadow:0 0 5px currentColor}
-  #msg{margin-top:16px;font-size:clamp(20px,4vw,38px);font-weight:700;background:linear-gradient(90deg,#ff5f6d,#ffc371,#5ffbf1,#c79bff,#ff5f6d);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+  #art{font-size:12px;line-height:12px;letter-spacing:0;white-space:pre;margin:0;user-select:none;text-shadow:0 0 6px currentColor}
+  #msg{margin-top:14px;font-size:clamp(20px,4vw,38px);font-weight:700;background:linear-gradient(90deg,#ff5f6d,#ffc371,#5ffbf1,#c79bff,#ff5f6d);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
   @keyframes shine{to{background-position:300% 0}}
   #sub{color:#6b7390;font-family:system-ui,sans-serif;font-size:12px;margin-top:5px}
   canvas#cf{position:fixed;inset:0;pointer-events:none}
@@ -23,47 +23,118 @@
   <div id="sub">click anywhere for confetti</div>
 </div>
 <script>
-// Spinning torus rendered as ASCII with z-buffer + per-column colour
+// ---- 3D layered birthday cake, rendered as ASCII with a z-buffer ----
 const art=document.getElementById('art');
-const COLS=88,ROWS=42;
-const RAMP=" .`-_':,;^=+/\"|)\\<>)iv%xclrs{},?JTLunz2IfCeot1a3kr6v85w9mG#&@";
-let A=0,B=0;
+const COLS=100,ROWS=46;
+// dark -> bright shading ramp (Paul Bourke style)
+const RAMP=" .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+const RL=RAMP.length;
+
+// projection / camera
+const K2=12, XS=118, YS=58;   // camera distance + x/y screen scale
+const cx0=COLS/2, cy0=ROWS/2;
+
+// light direction (from upper-front), normalised
+let Lx=0.35,Ly=0.72,Lz=-0.6; { const m=Math.hypot(Lx,Ly,Lz); Lx/=m;Ly/=m;Lz/=m; }
+
+// cake tiers: radius, bottom y, top y, hue, saturation
+const tiers=[
+  {r:2.45,y0:-1.55,y1:-0.62,hue:332,sat:68},  // strawberry pink
+  {r:1.82,y0:-0.62,y1:0.18, hue:46, sat:72},  // vanilla gold
+  {r:1.18,y0:0.18, y1:0.92, hue:280,sat:60},  // grape purple
+];
+const TOP=tiers[tiers.length-1].y1;
+
+// candles
+const NC=6, CR=0.66, CH=0.5;
+const candles=[];
+for(let k=0;k<NC;k++){const a=k/NC*6.2832;candles.push({x:CR*Math.cos(a),z:CR*Math.sin(a),hue:k%2?0:205});}
+
+let B=0, t=0;
+const ch=new Array(COLS*ROWS), zb=new Float32Array(COLS*ROWS);
+const hb=new Float32Array(COLS*ROWS), sb=new Float32Array(COLS*ROWS), lb=new Float32Array(COLS*ROWS);
+
+let cA,sA,cB,sB;
+function plot(x,y,z,nx,ny,nz,hue,sat,flame){
+  // spin about Y, then fixed tilt about X
+  const xb=x*cB+z*sB, zb1=-x*sB+z*cB;
+  const y2=y*cA-zb1*sA, z2=y*sA+zb1*cA, x2=xb;
+  const ooz=1/(z2+K2);
+  const xp=(cx0+XS*ooz*x2)|0, yp=(cy0-YS*ooz*y2)|0;
+  if(xp<0||xp>=COLS||yp<0||yp>=ROWS) return;
+  const idx=xp+yp*COLS;
+  if(ooz<=zb[idx]) return;
+  zb[idx]=ooz;
+  if(flame){
+    ch[idx]=Math.random()<.5?'*':'^';
+    hb[idx]=38+Math.random()*16; sb[idx]=100; lb[idx]=60+Math.random()*12;
+    return;
+  }
+  // rotate normal the same way for lambert shading
+  const nxb=nx*cB+nz*sB, nzb1=-nx*sB+nz*cB;
+  const ny2=ny*cA-nzb1*sA, nz2=ny*sA+nzb1*cA;
+  let lum=nxb*Lx+ny2*Ly+nz2*Lz; if(lum<0)lum=0;
+  const shade=0.22+0.78*lum;
+  ch[idx]=RAMP[Math.min(RL-1,(shade*(RL-1))|0)];
+  hb[idx]=hue; sb[idx]=sat; lb[idx]=20+shade*46;
+}
+
 function render(){
-  const N=COLS*ROWS,ch=new Array(N).fill(' '),zb=new Float32Array(N),hue=new Float32Array(N);
-  const cA=Math.cos(A),sA=Math.sin(A),cB=Math.cos(B),sB=Math.sin(B);
-  for(let theta=0;theta<6.283;theta+=0.055){
-    const ct=Math.cos(theta),st=Math.sin(theta);
-    for(let phi=0;phi<6.283;phi+=0.013){
-      const cp=Math.cos(phi),sp=Math.sin(phi);
-      const R1=1,R2=2.1,cx=R2+R1*ct;
-      const x0=cx*cp,y0=cx*sp,z0=R1*st;
-      const y1=y0*cA-z0*sA,z1=y0*sA+z0*cA;
-      const x2=x0*cB-y1*sB,y2=x0*sB+y1*cB,z2=z1;
-      const ooz=1/(z2+6);
-      const xp=((COLS/2)+25*ooz*x2)|0,yp=((ROWS/2)-12*ooz*y2)|0;
-      if(xp<0||xp>=COLS||yp<0||yp>=ROWS)continue;
-      const idx=xp+yp*COLS;if(ooz<=zb[idx])continue;
-      const nx=ct*cp,ny=ct*sp,nz=st;
-      const nyr=ny*cA-nz*sA,nzr=ny*sA+nz*cA;
-      const nxr=nx*cB-nyr*sB,nyrr=nx*sB+nyr*cB;
-      let lum=.55*nyrr+.55*nzr+.3*nxr;lum=Math.max(0,lum);
-      zb[idx]=ooz;ch[idx]=RAMP[Math.min(RAMP.length-1,(lum*(RAMP.length-1))|0)];
-      hue[idx]=((y0+3)*60+theta*28)%360;
+  ch.fill(' '); zb.fill(0);
+  cA=Math.cos(0.46+0.05*Math.sin(t*0.7)); sA=Math.sin(0.46+0.05*Math.sin(t*0.7)); // gentle nod
+  cB=Math.cos(B); sB=Math.sin(B);
+
+  // plate
+  for(let p=0;p<6.2832;p+=0.05){const cp=Math.cos(p),sp=Math.sin(p);
+    for(let rr=2.55;rr<=3.25;rr+=0.06) plot(rr*cp,tiers[0].y0-0.04,rr*sp,0,1,0,210,10,false);
+  }
+
+  // tier side walls + exposed tops
+  for(let i=0;i<tiers.length;i++){
+    const T=tiers[i];
+    for(let p=0;p<6.2832;p+=0.055){
+      const cp=Math.cos(p),sp=Math.sin(p);
+      for(let v=0;v<=1.0001;v+=0.045){
+        const yy=T.y0+v*(T.y1-T.y0);
+        plot(T.r*cp,yy,T.r*sp,cp,0,sp,T.hue,T.sat,false);
+      }
+    }
+    const inner=(i<tiers.length-1)?tiers[i+1].r:0;
+    for(let p=0;p<6.2832;p+=0.055){
+      const cp=Math.cos(p),sp=Math.sin(p);
+      for(let rr=inner;rr<=T.r;rr+=0.045)
+        plot(rr*cp,T.y1,rr*sp,0,1,0,T.hue,Math.max(0,T.sat-22),false); // frosting top, lighter
     }
   }
-  // candle flame pixels
-  const fx=(COLS/2)|0;
-  for(let i=0;i<18;i++){const px=fx+((Math.random()*5-2)|0),py=4+((Math.random()*4)|0);if(px>=0&&px<COLS&&py>=0){const id=px+py*COLS;ch[id]=Math.random()<.5?'*':'^';hue[id]=40+Math.random()*18;zb[id]=99;}}
+
+  // candles + flames
+  for(const c of candles){
+    for(let p=0;p<6.2832;p+=0.5){
+      const cp=Math.cos(p),sp=Math.sin(p),rad=0.07;
+      for(let v=0;v<=1;v+=0.1)
+        plot(c.x+rad*cp,TOP+v*CH,c.z+rad*sp,cp,0,sp,c.hue,85,false);
+    }
+    plot(c.x,TOP+CH+0.10,c.z,0,1,0,40,100,true);
+    plot(c.x,TOP+CH+0.19,c.z,0,1,0,40,100,true);
+  }
+
+  // emit coloured spans
   let html='';
   for(let y=0;y<ROWS;y++){
-    for(let x=0;x<COLS;x++){const id=x+y*COLS,c=ch[id];if(c===' '){html+=' ';continue;}const isFlame=zb[id]===99;html+=`<span style="color:hsl(${hue[id]},${isFlame?100:65}%,${isFlame?60:52}%)">${c}</span>`;}
+    for(let x=0;x<COLS;x++){
+      const id=x+y*COLS,c=ch[id];
+      if(c===' '){html+=' ';continue;}
+      html+='<span style="color:hsl('+(hb[id]|0)+','+(sb[id]|0)+'%,'+(lb[id]|0)+'%)">'+c+'</span>';
+    }
     html+='\n';
   }
-  art.innerHTML=html;A+=0.034;B+=0.017;requestAnimationFrame(render);
+  art.innerHTML=html;
+  B+=0.028; t+=0.016;
+  requestAnimationFrame(render);
 }
 render();
 
-// Confetti
+// ---- confetti ----
 const cf=document.getElementById('cf'),cc=cf.getContext('2d');
 function rs(){cf.width=innerWidth;cf.height=innerHeight;}addEventListener('resize',rs);rs();
 let bits=[];
