@@ -2,7 +2,7 @@
 
 A browser-based tool that **converts any image into ASCII art** for use as a personalized birthday greeting — and a standalone [`demo.html`](demo.html) featuring a real-time 3D spinning cake rendered entirely in ASCII.
 
-**[▶ Try the Image Tool](https://woodyhoko.github.io/birthday_ascii)** | **[▶ Try the 3D ASCII Demo](demo.html)**
+**[▶ Try the Image Tool](tool.html)** | **[▶ Try the 3D ASCII Demo](demo.html)**
 
 ---
 

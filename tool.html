@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+    <title>ascii art</title>
+    <style>
+
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        canvas, img {
+            display: block;
+            margin: auto;
+        }
+
+    </style>
+</head>
+<body>
+<button class="btn btn-primary" id="find_pic_but">find a cake</button>
+<button id="clickButton">bake your cake</button>
+<button id="download_but">take home : )</button>
+
+<br/><br />
+bake using keywords : <input id="readTheInput" value="#KDGLftji+;,:."/>
+<br/><br />
+Don't want a cake as Birthday present?
+<br/>
+I want a <input id="keyword_input" value="cake"/> <button id="change_but">instead!!</button>
+<br/><br/>
+<img id="ori" src=''/>
+<canvas id="ascii-canvas"></canvas>
+<tt style="white-space: pre-line; display: inline-block;
+  font-size: 12px;
+  transform: scale(1, .7);" id="rawtext"></tt>
+<script>
+	
+	var keyword = "cake";
+	
+	document.getElementById("change_but").addEventListener("click", () =>{
+		keyword = document.getElementById("keyword_input").value;
+   });
+	
+	var random_img = "";
+	
+	function find_pic(){
+    $(document).ready(function(){
+
+        $.getJSON("http://api.flickr.com/services/feeds/photos_public.gne?jsoncallback=?",
+        {
+            tags: keyword,
+            tagmode: "any",
+            format: "json"
+        },
+        function(data) {
+            var rnd = Math.floor(Math.random() * data.items.length);
+            var image_src = data.items[rnd]['media']['m'].replace("_m", "_b");
+			random_img = image_src;
+			
+			var imgori = document.getElementById('ori')
+			imgori.src = random_img
+
+            //$('body').css('background-image', "url('" + image_src + "')");
+        });
+    });}
+	
+	var download = function(){
+	  var link = document.createElement('a');
+	  link.download = 'Happy Birthday.png';
+	  link.href = document.getElementById('ascii-canvas').toDataURL()
+	  link.click();
+	}
+	
+	
+	
+	document.getElementById("download_but").addEventListener("click", () =>{
+		download();
+   });
+	
+	document.getElementById("find_pic_but").addEventListener("click", () =>{
+		find_pic();
+   });
+
+	document.getElementById("clickButton").addEventListener("click", () =>{
+		console.log(document.getElementById("readTheInput").value);
+		abc(document.getElementById("readTheInput").value);
+   });
+	
+	function abc(elechar) {
+    // canvas 实现
+	var offScreenCvs = document.createElement('canvas')
+	var offScreenCtx = offScreenCvs.getContext('2d', { alpha: false })
+	var asciiCvs = document.getElementById('ascii-canvas')
+	var asciiCtx = asciiCvs.getContext('2d', { alpha: false })
+	var offScreenCvsWidth, offScreenCvsHeight, asciiCvsWidth, asciiCvsHeight
+	var fontSize = 4
+	var samplerStep = 2
+	
+	
+
+	var img = new Image()
+	var onImgLoaded = function () {
+	  offScreenCvsWidth = img.width
+	  offScreenCvsHeight = img.height
+	  offScreenCvs.width = offScreenCvsWidth
+	  offScreenCvs.height = offScreenCvsHeight
+	  offScreenCtx.drawImage(img, 0, 0, offScreenCvsWidth, offScreenCvsHeight)
+	  imageData = offScreenCtx.getImageData(0, 0, offScreenCvsWidth, offScreenCvsHeight)
+	  asciiCvsWidth = offScreenCvsWidth / samplerStep * fontSize
+	  asciiCvsHeight = (offScreenCvsHeight / samplerStep + 1) * fontSize
+	  asciiCvs.width = asciiCvsWidth
+	  asciiCvs.height = asciiCvsHeight
+	  render()
+	}
+	img.src = random_img//'https://picsum.photos/200/300'
+	img.crossOrigin = 'anonymous';
+	img.complete ? onImgLoaded() : (img.onload = onImgLoaded)
+
+	var imageData
+	var x, y, _x, _y, pos
+	var r, g, b
+	var asciiCharArray = elechar.split('')
+	var durationPerChar = Math.ceil(255 / asciiCharArray.length)
+
+	function render () {
+	  var imageDataContent = imageData.data
+	  var part1, part2
+	  var letter
+	  var value
+	  asciiCtx.fillStyle = '#ffffff'
+	  asciiCtx.fillRect(0, 0, asciiCvsWidth, asciiCvsHeight)
+	  asciiCtx.fillStyle = '#000000'
+	  asciiCtx.font = fontSize + 'px SimHei'
+	  var temp;
+	  temp = "";
+	  for (y = 0, _y = 0; y < offScreenCvsHeight; y += samplerStep, _y++) {
+		for (x = 0, _x = 0; x < offScreenCvsWidth; x += samplerStep, _x++) {
+		  pos = y * offScreenCvsWidth + x
+		  r = imageDataContent[pos * 4]
+		  g = imageDataContent[pos * 4 + 1]
+		  b = imageDataContent[pos * 4 + 2]
+		  value = r * 0.3086 + g * 0.6094 + b * 0.0820
+		  imageDataContent[pos * 4] = imageDataContent[pos * 4 + 1] = imageDataContent[pos * 4 + 2] = value
+
+		  part1 = Math.floor(value / durationPerChar)
+		  part2 = value % durationPerChar
+		  letter = part2 ? asciiCharArray[part1] : (part1 ? asciiCharArray[part1 - 1] : 'æ')
+
+		  asciiCtx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')'
+		  asciiCtx.fillText(letter, _x * fontSize, (_y + 1) * fontSize)
+		  temp+=letter;
+		}
+		temp+='\n';
+	  }
+	  document.getElementById("rawtext").textContent=temp;
+	  //console.log(temp);
+	}
+  }
+</script>
+</body>
+</html>
