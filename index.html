@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Birthday ASCII Art Generator 🎂</title>
+<meta name="description" content="Turn any image into ASCII art for a personalized birthday greeting — plus a real-time 3D spinning cake rendered entirely in ASCII.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0c0c16;--ink:#f3f0ff;--muted:#9a93b8;--p:#ff5fae;--y:#ffd23f;--c:#3fe0ff;--g:#5ef38c;--line:rgba(255,255,255,.09)}
+  *{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:Fredoka,system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .bg{position:fixed;inset:0;z-index:0;background:radial-gradient(800px 600px at 50% -5%,#23173a 0,var(--bg) 60%)}
+  .confetti{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+  .confetti i{position:absolute;top:-20px;width:9px;height:14px;border-radius:2px;opacity:.8;animation:fall linear infinite}
+  @keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
+  .wrap{position:relative;z-index:3;max-width:980px;margin:0 auto;padding:0 24px}
+  header{min-height:90vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:80px 0 40px}
+  .ascii{font-family:"JetBrains Mono";font-weight:700;font-size:clamp(8px,1.7vw,15px);line-height:1.05;white-space:pre;color:var(--y);text-shadow:0 0 18px rgba(255,210,63,.4);margin-bottom:8px}
+  .tag{font-family:"JetBrains Mono";font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--c);margin:6px 0 18px}
+  h1{font-weight:700;font-size:clamp(34px,6.5vw,72px);line-height:1.04;letter-spacing:-1px}
+  h1 .gr{background:linear-gradient(100deg,var(--p),var(--y),var(--c),var(--g));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{font-size:clamp(16px,2vw,20px);color:var(--muted);max-width:620px;margin:22px 0}
+  .cta{display:flex;flex-wrap:wrap;gap:13px;justify-content:center;margin-top:26px}
+  .btn{display:inline-flex;align-items:center;gap:9px;padding:14px 26px;border-radius:100px;font-weight:600;font-size:15px;transition:.18s;border:1px solid var(--line)}
+  .btn.p{background:linear-gradient(100deg,var(--p),var(--y));color:#2a0a1d;border:none}.btn.p:hover{transform:translateY(-3px) scale(1.03)}
+  .btn.g{background:rgba(255,255,255,.04)}.btn.g:hover{border-color:var(--c);color:var(--c);transform:translateY(-3px)}
+  section{padding:46px 0}
+  .ttl{font-weight:700;font-size:clamp(22px,3.2vw,34px);text-align:center;margin-bottom:32px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .c{background:rgba(26,18,42,.6);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:20px;padding:28px;transition:.2s}
+  .c:hover{transform:translateY(-5px);border-color:rgba(255,95,174,.45)}
+  .c .ic{font-size:30px;margin-bottom:12px}.c h3{font-size:19px;margin-bottom:8px}.c p{font-size:14px;color:var(--muted);margin-bottom:16px}
+  .c a{font-family:"JetBrains Mono";font-size:13px;font-weight:700;color:var(--y)}.c a:hover{text-decoration:underline}
+  .ramp{font-family:"JetBrains Mono";font-size:13px;color:var(--g);background:#08080f;border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;text-align:center;margin-top:8px}
+  footer{border-top:1px solid var(--line);margin-top:40px;padding:36px 0 56px;text-align:center;color:var(--muted);font-size:14px}
+  footer a{color:var(--p)}.fl{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+</style></head>
+<body>
+<div class="bg"></div><div class="confetti" id="cf"></div>
+<div class="wrap">
+  <header>
+    <pre class="ascii">   .  . .  .
+  (   )  (
+   )_(__)_(
+  {========}
+ .-"""""""""-.
+( H A P P Y ! )
+ '-.........-'</pre>
+    <div class="tag">image → ascii · in your browser</div>
+    <h1>Birthday greetings,<br><span class="gr">rendered in characters.</span></h1>
+    <p class="lede">A browser tool that maps any image's luminance to a density ramp of characters — plus a real-time 3D spinning cake drawn entirely in ASCII with a z-buffer and Lambertian shading.</p>
+    <div class="cta">
+      <a class="btn p" href="tool.html">🖼️ Try the Image Tool</a>
+      <a class="btn g" href="demo.html">🍰 3D ASCII Cake Demo</a>
+      <a class="btn g" href="https://github.com/woodyhoko/birthday_ascii#readme">📖 Documentation</a>
+    </div>
+  </header>
+
+  <section>
+    <div class="ttl">Two things to play with</div>
+    <div class="grid">
+      <div class="c"><div class="ic">🖼️</div><h3>Image → ASCII</h3><p>Decodes onto a hidden canvas, samples each cell's perceptual luminance (BT.601 luma) and picks a character from a sparse-to-dense ramp. Export the result as a PNG.</p><a href="tool.html">Open the tool →</a></div>
+      <div class="c"><div class="ic">🍩</div><h3>3D Spinning Cake</h3><p>A torus parameterized by two angles, rotated each frame, projected with perspective, depth-sorted by a z-buffer and tinted with HSL for that rainbow-iced look.</p><a href="demo.html">Watch the demo →</a></div>
+    </div>
+    <div class="ramp">ramp = " .`-_':,;^=+/|\\&lt;&gt;ivxcl{}?JTLF2ICtaek68mG#@"</div>
+  </section>
+
+  <footer>
+    <div class="fl"><a href="tool.html">Image Tool</a><a href="demo.html">3D Cake</a><a href="https://github.com/woodyhoko/birthday_ascii">GitHub</a><a href="https://github.com/woodyhoko/birthday_ascii#readme">README</a></div>
+    Built by <a href="https://github.com/woodyhoko">woodyhoko</a> · Birthday ASCII Art Generator 🎂
+  </footer>
+</div>
+<script>
+  const cols=["#ff5fae","#ffd23f","#3fe0ff","#5ef38c","#b07cff"],cf=document.getElementById('cf');
+  for(let i=0;i<40;i++){const s=document.createElement('i');s.style.left=Math.random()*100+'%';s.style.background=cols[i%cols.length];s.style.animationDuration=(4+Math.random()*5)+'s';s.style.animationDelay=(-Math.random()*8)+'s';cf.appendChild(s);}
+</script>
+</body></html>
