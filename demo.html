@@ -3,15 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Happy Birthday — ASCII 3D Cake</title>
+<title>Happy Birthday — ASCII Cake</title>
 <style>
-  html,body{margin:0;height:100%;background:#05060a;overflow:hidden}
-  body{display:flex;align-items:center;justify-content:center;font-family:"Cascadia Code","Consolas",monospace}
+  html,body{margin:0;height:100%;background:radial-gradient(120% 120% at 50% 0,#13182e 0,#05060a 60%);overflow:hidden}
+  body{display:flex;align-items:center;justify-content:center;flex-direction:column;
+       font-family:"Cascadia Code","Consolas",ui-monospace,monospace}
   #scene{text-align:center}
-  #art{font-size:12px;line-height:12px;letter-spacing:0;white-space:pre;margin:0;user-select:none;text-shadow:0 0 6px currentColor}
-  #msg{margin-top:14px;font-size:clamp(20px,4vw,38px);font-weight:700;background:linear-gradient(90deg,#ff5f6d,#ffc371,#5ffbf1,#c79bff,#ff5f6d);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+  #art{font-size:clamp(9px,2.7vw,17px);line-height:1.04;white-space:pre;margin:0;user-select:none;
+       text-shadow:0 0 8px rgba(0,0,0,.6)}
+  .flame{color:#ffd24a;text-shadow:0 0 8px #ff9b2e,0 0 16px #ff6a00;animation:none}
+  #msg{margin-top:18px;font-size:clamp(22px,5vw,42px);font-weight:700;
+       background:linear-gradient(90deg,#ff5f6d,#ffc371,#5ffbf1,#c79bff,#ff5f6d);background-size:300% 100%;
+       -webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
   @keyframes shine{to{background-position:300% 0}}
-  #sub{color:#6b7390;font-family:system-ui,sans-serif;font-size:12px;margin-top:5px}
+  #sub{color:#6b7390;font-family:system-ui,sans-serif;font-size:13px;margin-top:7px}
   canvas#cf{position:fixed;inset:0;pointer-events:none}
 </style>
 </head>
@@ -20,130 +25,128 @@
 <div id="scene">
   <pre id="art"></pre>
   <div id="msg">Happy Birthday!</div>
-  <div id="sub">click anywhere for confetti</div>
+  <div id="sub">click anywhere for confetti 🎉</div>
 </div>
 <script>
-// ---- 3D layered birthday cake, rendered as ASCII with a z-buffer ----
-const art=document.getElementById('art');
-const COLS=100,ROWS=46;
-// dark -> bright shading ramp (Paul Bourke style)
-const RAMP=" .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
-const RL=RAMP.length;
+const art = document.getElementById('art');
 
-// projection / camera
-const K2=12, XS=118, YS=58;   // camera distance + x/y screen scale
-const cx0=COLS/2, cy0=ROWS/2;
+// Candle columns (0-based) on the flame/wick rows, sitting on the top tier.
+const FLAME_COLS = [6, 10, 14, 18, 22];
+const ROWW = 31;                       // total row width for centring
 
-// light direction (from upper-front), normalised
-let Lx=0.35,Ly=0.72,Lz=-0.6; { const m=Math.hypot(Lx,Ly,Lz); Lx/=m;Ly/=m;Lz/=m; }
+const rep = (c, n) => c.repeat(n);
+const center = (s, n) => {
+  const pad = n - s.length, l = pad >> 1;
+  return rep(' ', l) + s + rep(' ', pad - l);
+};
+// Pad a line to ROWW and left-center it so the cake stays centred.
+const padc = (s) => center(s, ROWW);
 
-// cake tiers: radius, bottom y, top y, hue, saturation
-const tiers=[
-  {r:2.45,y0:-1.55,y1:-0.62,hue:332,sat:68},  // strawberry pink
-  {r:1.82,y0:-0.62,y1:0.18, hue:46, sat:72},  // vanilla gold
-  {r:1.18,y0:0.18, y1:0.92, hue:280,sat:60},  // grape purple
+// Build the wick/candle rows: a glyph at each FLAME_COL, spaces elsewhere.
+function colsRow(glyph) {
+  let s = rep(' ', ROWW).split('');
+  for (const c of FLAME_COLS) s[c] = glyph;
+  return s.join('');
+}
+
+// ---- static cake body (each entry: [text, cssColor]) ----
+const CAKE = [
+  [colsRow('|'), '#9aa0b5'],                                    // wicks
+  ['  ' + rep('_', 27),                       '#ff9ec7'],       // top-tier rim
+  [' .' + rep('~', 27) + '.',                 '#ff7fb0'],       // frosting drip
+  [' |' + center('HAPPY  BIRTHDAY', 27) + '|','#ffe08a'],       // message band
+  [' |' + rep(':', 27) + '|',                 '#e3a268'],       // sponge
+  ['.' + rep('_', 29) + '.',                  '#ff9ec7'],       // bottom-tier rim
+  ['|' + rep('~', 29) + '|',                  '#ff7fb0'],       // frosting drip
+  ['CHERRIES', '#e3a268'],                                      // cherry row (special)
+  ['|' + rep(':', 29) + '|',                  '#e3a268'],       // sponge
+  ["'" + rep('_', 29) + "'",                  '#caa6c9'],       // bottom edge
+  [' ' + rep('=', 29) + ' ',                  '#b9c2d0'],       // plate top
+  ['(' + rep('_', 29) + ')',                  '#8b94a6'],       // plate
 ];
-const TOP=tiers[tiers.length-1].y1;
 
-// candles
-const NC=6, CR=0.66, CH=0.5;
-const candles=[];
-for(let k=0;k<NC;k++){const a=k/NC*6.2832;candles.push({x:CR*Math.cos(a),z:CR*Math.sin(a),hue:k%2?0:205});}
+// Candle bodies get individual colours; cherries are red dots on the tan band.
+const CANDLE_COLORS = ['#ff6b6b', '#6bc5ff', '#9bffb0', '#ffd166', '#c79bff'];
 
-let B=0, t=0;
-const ch=new Array(COLS*ROWS), zb=new Float32Array(COLS*ROWS);
-const hb=new Float32Array(COLS*ROWS), sb=new Float32Array(COLS*ROWS), lb=new Float32Array(COLS*ROWS);
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-let cA,sA,cB,sB;
-function plot(x,y,z,nx,ny,nz,hue,sat,flame){
-  // spin about Y, then fixed tilt about X
-  const xb=x*cB+z*sB, zb1=-x*sB+z*cB;
-  const y2=y*cA-zb1*sA, z2=y*sA+zb1*cA, x2=xb;
-  const ooz=1/(z2+K2);
-  const xp=(cx0+XS*ooz*x2)|0, yp=(cy0-YS*ooz*y2)|0;
-  if(xp<0||xp>=COLS||yp<0||yp>=ROWS) return;
-  const idx=xp+yp*COLS;
-  if(ooz<=zb[idx]) return;
-  zb[idx]=ooz;
-  if(flame){
-    ch[idx]=Math.random()<.5?'*':'^';
-    hb[idx]=38+Math.random()*16; sb[idx]=100; lb[idx]=60+Math.random()*12;
-    return;
+function buildHTML() {
+  const lines = [];
+
+  // Flame row (animated): a <span class="flame"> at each candle column.
+  {
+    const cells = rep(' ', ROWW).split('');
+    FLAME_COLS.forEach((c, i) => { cells[c] = '\0' + i; });   // placeholder marker
+    lines.push(cells.map(ch => ch[0] === '\0'
+      ? `<span class="flame" data-f="${ch.slice(1)}">^</span>`
+      : esc(ch)).join(''));
   }
-  // rotate normal the same way for lambert shading
-  const nxb=nx*cB+nz*sB, nzb1=-nx*sB+nz*cB;
-  const ny2=ny*cA-nzb1*sA, nz2=ny*sA+nzb1*cA;
-  let lum=nxb*Lx+ny2*Ly+nz2*Lz; if(lum<0)lum=0;
-  const shade=0.22+0.78*lum;
-  ch[idx]=RAMP[Math.min(RL-1,(shade*(RL-1))|0)];
-  hb[idx]=hue; sb[idx]=sat; lb[idx]=20+shade*46;
+
+  CAKE.forEach(([text, color], idx) => {
+    // Candle/wick row: colour each stick distinctly (already ROWW wide).
+    if (idx === 0) {
+      lines.push(text.split('').map((ch, x) => {
+        const ci = FLAME_COLS.indexOf(x);
+        return ci >= 0 ? `<span style="color:${CANDLE_COLORS[ci]}">|</span>` : esc(ch);
+      }).join(''));
+      return;
+    }
+    // Tan sponge band with red cherries dotted across it (already ROWW wide).
+    if (text === 'CHERRIES') {
+      const inner = rep(' ', 29).split('');
+      for (let c = 2; c < 29; c += 4) inner[c] = '*';
+      const html = inner.map(ch => ch === '*'
+        ? '<span style="color:#ff5d6c">o</span>'
+        : `<span style="color:#e3a268">${esc(ch)}</span>`).join('');
+      lines.push(`<span style="color:#e3a268">|</span>${html}<span style="color:#e3a268">|</span>`);
+      return;
+    }
+    lines.push(`<span style="color:${color}">${esc(padc(text))}</span>`);
+  });
+
+  return lines.join('\n');
 }
 
-function render(){
-  ch.fill(' '); zb.fill(0);
-  cA=Math.cos(0.46+0.05*Math.sin(t*0.7)); sA=Math.sin(0.46+0.05*Math.sin(t*0.7)); // gentle nod
-  cB=Math.cos(B); sB=Math.sin(B);
+art.innerHTML = buildHTML();
 
-  // plate
-  for(let p=0;p<6.2832;p+=0.05){const cp=Math.cos(p),sp=Math.sin(p);
-    for(let rr=2.55;rr<=3.25;rr+=0.06) plot(rr*cp,tiers[0].y0-0.04,rr*sp,0,1,0,210,10,false);
+// ---- flame flicker animation ----
+const FLAMES = ['^', '*', '.', '\'', ':', '^'];
+const flameEls = [...document.querySelectorAll('.flame')];
+function flicker() {
+  for (const el of flameEls) {
+    el.textContent = FLAMES[(Math.random() * FLAMES.length) | 0];
+    const h = 36 + Math.random() * 18;               // gold -> orange
+    el.style.color = `hsl(${h},100%,${58 + Math.random() * 14}%)`;
   }
-
-  // tier side walls + exposed tops
-  for(let i=0;i<tiers.length;i++){
-    const T=tiers[i];
-    for(let p=0;p<6.2832;p+=0.055){
-      const cp=Math.cos(p),sp=Math.sin(p);
-      for(let v=0;v<=1.0001;v+=0.045){
-        const yy=T.y0+v*(T.y1-T.y0);
-        plot(T.r*cp,yy,T.r*sp,cp,0,sp,T.hue,T.sat,false);
-      }
-    }
-    const inner=(i<tiers.length-1)?tiers[i+1].r:0;
-    for(let p=0;p<6.2832;p+=0.055){
-      const cp=Math.cos(p),sp=Math.sin(p);
-      for(let rr=inner;rr<=T.r;rr+=0.045)
-        plot(rr*cp,T.y1,rr*sp,0,1,0,T.hue,Math.max(0,T.sat-22),false); // frosting top, lighter
-    }
-  }
-
-  // candles + flames
-  for(const c of candles){
-    for(let p=0;p<6.2832;p+=0.5){
-      const cp=Math.cos(p),sp=Math.sin(p),rad=0.07;
-      for(let v=0;v<=1;v+=0.1)
-        plot(c.x+rad*cp,TOP+v*CH,c.z+rad*sp,cp,0,sp,c.hue,85,false);
-    }
-    plot(c.x,TOP+CH+0.10,c.z,0,1,0,40,100,true);
-    plot(c.x,TOP+CH+0.19,c.z,0,1,0,40,100,true);
-  }
-
-  // emit coloured spans
-  let html='';
-  for(let y=0;y<ROWS;y++){
-    for(let x=0;x<COLS;x++){
-      const id=x+y*COLS,c=ch[id];
-      if(c===' '){html+=' ';continue;}
-      html+='<span style="color:hsl('+(hb[id]|0)+','+(sb[id]|0)+'%,'+(lb[id]|0)+'%)">'+c+'</span>';
-    }
-    html+='\n';
-  }
-  art.innerHTML=html;
-  B+=0.028; t+=0.016;
-  requestAnimationFrame(render);
 }
-render();
+setInterval(flicker, 110);
 
 // ---- confetti ----
-const cf=document.getElementById('cf'),cc=cf.getContext('2d');
-function rs(){cf.width=innerWidth;cf.height=innerHeight;}addEventListener('resize',rs);rs();
-let bits=[];
-function burst(x,y){const cols=['#ff5f6d','#ffc371','#5ffbf1','#c79bff','#9bffb0','#ffd166'];for(let i=0;i<130;i++)bits.push({x,y,vx:(Math.random()*2-1)*7,vy:Math.random()*-9-2,g:.28+Math.random()*.12,s:3+Math.random()*4,c:cols[(Math.random()*cols.length)|0],r:Math.random()*6,life:130});}
-function tick(){cc.clearRect(0,0,cf.width,cf.height);bits=bits.filter(b=>b.life-->0);for(const b of bits){b.vy+=b.g;b.x+=b.vx;b.y+=b.vy;b.r+=.18;cc.save();cc.translate(b.x,b.y);cc.rotate(b.r);cc.fillStyle=b.c;cc.globalAlpha=Math.max(0,b.life/130);cc.fillRect(-b.s/2,-b.s/2,b.s,b.s*1.6);cc.restore();}cc.globalAlpha=1;requestAnimationFrame(tick);}
+const cf = document.getElementById('cf'), cc = cf.getContext('2d');
+function rs(){ cf.width = innerWidth; cf.height = innerHeight; } addEventListener('resize', rs); rs();
+let bits = [];
+function burst(x, y){
+  const cols = ['#ff5f6d','#ffc371','#5ffbf1','#c79bff','#9bffb0','#ffd166'];
+  for (let i = 0; i < 130; i++) bits.push({
+    x, y, vx:(Math.random()*2-1)*7, vy:Math.random()*-9-2, g:.28+Math.random()*.12,
+    s:3+Math.random()*4, c:cols[(Math.random()*cols.length)|0], r:Math.random()*6, life:130
+  });
+}
+function tick(){
+  cc.clearRect(0,0,cf.width,cf.height);
+  bits = bits.filter(b => b.life-- > 0);
+  for (const b of bits){
+    b.vy += b.g; b.x += b.vx; b.y += b.vy; b.r += .18;
+    cc.save(); cc.translate(b.x, b.y); cc.rotate(b.r);
+    cc.fillStyle = b.c; cc.globalAlpha = Math.max(0, b.life/130);
+    cc.fillRect(-b.s/2, -b.s/2, b.s, b.s*1.6); cc.restore();
+  }
+  cc.globalAlpha = 1; requestAnimationFrame(tick);
+}
 tick();
-addEventListener('click',e=>burst(e.clientX,e.clientY));
-setTimeout(()=>burst(innerWidth/2,innerHeight*.45),500);
-setInterval(()=>burst(Math.random()*innerWidth,innerHeight*.3),2800);
+addEventListener('click', e => burst(e.clientX, e.clientY));
+setTimeout(() => burst(innerWidth/2, innerHeight*.42), 500);
+setInterval(() => burst(Math.random()*innerWidth, innerHeight*.3), 2800);
 </script>
 </body>
 </html>
