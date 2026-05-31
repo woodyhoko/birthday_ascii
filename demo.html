@@ -9,7 +9,7 @@
   body{display:flex;align-items:center;justify-content:center;flex-direction:column;
        font-family:"Cascadia Code","Consolas",ui-monospace,monospace}
   #scene{text-align:center}
-  #art{font-size:clamp(6px,1.55vw,12px);line-height:1.0;white-space:pre;margin:0;user-select:none;
+  #art{font-size:clamp(7px,1.7vw,13px);line-height:1.0;white-space:pre;margin:0;user-select:none;
        letter-spacing:.5px;text-shadow:0 0 6px rgba(0,0,0,.55)}
   #msg{margin-top:10px;font-size:clamp(22px,5vw,42px);font-weight:700;
        background:linear-gradient(90deg,#ff5f6d,#ffc371,#5ffbf1,#c79bff,#ff5f6d);background-size:300% 100%;
@@ -37,9 +37,9 @@
 const art = document.getElementById('art');
 
 // ---- screen / camera constants (tuned so the cake stays framed & centred) ---
-const W = 80, H = 34;        // character grid
+const W = 84, H = 40;        // character grid
 const K2 = 9;                // camera distance
-const K1X = 42, K1Y = 30;    // projection scale (Y smaller: chars are ~2:1 tall)
+const K1X = 80, K1Y = 58;    // projection scale (Y smaller: chars are ~2:1 tall)
 const TILT = 0.42;           // fixed forward tilt so we look down onto the top
 const RAMP = ".,-~:;=!*#$@"; // luminance -> glyph
 // light direction in view space (front, above, toward camera): normalised
@@ -67,9 +67,9 @@ const TIERS=[[-2.2,-1.0,2.4],[-1.0,0.1,1.7],[0.1,1.0,1.0]];
 
 // tier side walls
 TIERS.forEach(([y0,y1,r],ti)=>{
-  for(let th=0; th<6.283; th+=0.13){
+  for(let th=0; th<6.283; th+=0.045){
     const ct=Math.cos(th), st=Math.sin(th);
-    for(let y=y0; y<=y1; y+=0.10){
+    for(let y=y0; y<=y1; y+=0.06){
       // a little frosting "drip" highlight near the top lip of each wall
       const drip = (y > y1-0.18) ? FROST : TIER_COLS[ti];
       add(r*ct, y, r*st,  ct,0,st,  drip);
@@ -79,8 +79,8 @@ TIERS.forEach(([y0,y1,r],ti)=>{
 
 // frosting rings (exposed tops where the next tier is narrower) + crown disk
 function disk(yTop, rInner, rOuter, baseCol, sprinkle){
-  for(let rr=rInner; rr<=rOuter; rr+=0.11){
-    for(let th=0; th<6.283; th+=0.13){
+  for(let rr=rInner; rr<=rOuter; rr+=0.06){
+    for(let th=0; th<6.283; th+=0.045){
       let col = baseCol;
       if(sprinkle && Math.sin(rr*40.0+th*9.0) > 0.86)            // scattered sprinkles
         col = SPRINKLE[((rr*7+th*3)|0) % SPRINKLE.length];
@@ -99,9 +99,9 @@ disk(-2.2, 0.0, 2.9, PLATE, false);
 const NC=5, CRING=0.6;
 for(let i=0;i<NC;i++){
   const a=i/NC*6.283, cx=CRING*Math.cos(a), cz=CRING*Math.sin(a), col=CANDLE_COLS[i];
-  for(let y=1.0; y<=1.62; y+=0.07){
+  for(let y=1.0; y<=1.62; y+=0.05){
     const stripe = (((y*7)|0)%2) ? [255,255,255] : col;   // candy-cane stripes
-    for(let th=0; th<6.283; th+=0.45){
+    for(let th=0; th<6.283; th+=0.3){
       const ct=Math.cos(th), st=Math.sin(th);
       add(cx+0.085*ct, y, cz+0.085*st,  ct,0,st,  stripe);
     }
@@ -189,7 +189,7 @@ function render(A){
 
 let ang=0, last=performance.now();
 function loop(t){
-  ang += (t-last)*0.0011;   // ~ steady spin, framerate independent
+  ang += (t-last)*0.00048;   // gentle, framerate-independent spin
   last=t;
   render(ang);
   requestAnimationFrame(loop);
