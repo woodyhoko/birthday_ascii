@@ -3,20 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Happy Birthday — ASCII Cake</title>
+<title>Happy Birthday — 3D ASCII Cake</title>
 <style>
   html,body{margin:0;height:100%;background:radial-gradient(120% 120% at 50% 0,#13182e 0,#05060a 60%);overflow:hidden}
   body{display:flex;align-items:center;justify-content:center;flex-direction:column;
        font-family:"Cascadia Code","Consolas",ui-monospace,monospace}
   #scene{text-align:center}
-  #art{font-size:clamp(9px,2.7vw,17px);line-height:1.04;white-space:pre;margin:0;user-select:none;
-       text-shadow:0 0 8px rgba(0,0,0,.6)}
-  .flame{color:#ffd24a;text-shadow:0 0 8px #ff9b2e,0 0 16px #ff6a00;animation:none}
-  #msg{margin-top:18px;font-size:clamp(22px,5vw,42px);font-weight:700;
+  #art{font-size:clamp(6px,1.55vw,12px);line-height:1.0;white-space:pre;margin:0;user-select:none;
+       letter-spacing:.5px;text-shadow:0 0 6px rgba(0,0,0,.55)}
+  #msg{margin-top:10px;font-size:clamp(22px,5vw,42px);font-weight:700;
        background:linear-gradient(90deg,#ff5f6d,#ffc371,#5ffbf1,#c79bff,#ff5f6d);background-size:300% 100%;
        -webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
   @keyframes shine{to{background-position:300% 0}}
-  #sub{color:#6b7390;font-family:system-ui,sans-serif;font-size:13px;margin-top:7px}
+  #sub{color:#6b7390;font-family:system-ui,sans-serif;font-size:13px;margin-top:6px}
   canvas#cf{position:fixed;inset:0;pointer-events:none}
 </style>
 </head>
@@ -25,128 +24,204 @@
 <div id="scene">
   <pre id="art"></pre>
   <div id="msg">Happy Birthday!</div>
-  <div id="sub">click anywhere for confetti 🎉</div>
+  <div id="sub">a real 3D cake, z-buffered &amp; spinning in pure ASCII — click for confetti 🎉</div>
 </div>
 <script>
+// ============================================================================
+//  Real-time 3D ASCII birthday cake.
+//  Geometry is sampled into a point cloud (tier walls, frosting rings, candles,
+//  flames, plate). Every frame each point is spun about the vertical axis,
+//  tilted toward the camera, perspective-projected and resolved through a
+//  z-buffer; surface luminance comes from a Lambertian dot with a fixed light.
+// ============================================================================
 const art = document.getElementById('art');
 
-// Candle columns (0-based) on the flame/wick rows, sitting on the top tier.
-const FLAME_COLS = [6, 10, 14, 18, 22];
-const ROWW = 31;                       // total row width for centring
+// ---- screen / camera constants (tuned so the cake stays framed & centred) ---
+const W = 80, H = 34;        // character grid
+const K2 = 9;                // camera distance
+const K1X = 42, K1Y = 30;    // projection scale (Y smaller: chars are ~2:1 tall)
+const TILT = 0.42;           // fixed forward tilt so we look down onto the top
+const RAMP = ".,-~:;=!*#$@"; // luminance -> glyph
+// light direction in view space (front, above, toward camera): normalised
+const L = (() => { const v=[-0.30,0.72,-0.62], m=Math.hypot(...v); return v.map(c=>c/m); })();
 
-const rep = (c, n) => c.repeat(n);
-const center = (s, n) => {
-  const pad = n - s.length, l = pad >> 1;
-  return rep(' ', l) + s + rep(' ', pad - l);
-};
-// Pad a line to ROWW and left-center it so the cake stays centred.
-const padc = (s) => center(s, ROWW);
+// ---- palette -----------------------------------------------------------------
+const TIER_COLS = [[255,126,182],[255,200,126],[139,233,253]];  // pink / gold / cyan
+const FROST = [255,244,214];                 // cream frosting
+const PLATE = [170,180,200];                 // silver plate
+const SPRINKLE = [[255,93,108],[107,197,255],[155,255,176],[255,209,102],[199,155,255],[255,255,255]];
+const CANDLE_COLS = [[255,107,107],[107,197,255],[155,255,176],[255,209,102],[199,155,255]];
 
-// Build the wick/candle rows: a glyph at each FLAME_COL, spaces elsewhere.
-function colsRow(glyph) {
-  let s = rep(' ', ROWW).split('');
-  for (const c of FLAME_COLS) s[c] = glyph;
-  return s.join('');
+// ---- build the static point cloud -------------------------------------------
+// Each point: px,py,pz position · nx,ny,nz normal · cr,cg,cb base colour · fl flame flag
+const px=[],py=[],pz=[],nx=[],ny=[],nz=[],cr=[],cg=[],cb=[],fl=[];
+function add(x,y,z, ax,ay,az, c, flame=0){
+  const m=Math.hypot(ax,ay,az)||1;
+  px.push(x);py.push(y);pz.push(z);
+  nx.push(ax/m);ny.push(ay/m);nz.push(az/m);
+  cr.push(c[0]);cg.push(c[1]);cb.push(c[2]);fl.push(flame);
 }
 
-// ---- static cake body (each entry: [text, cssColor]) ----
-const CAKE = [
-  [colsRow('|'), '#9aa0b5'],                                    // wicks
-  ['  ' + rep('_', 27),                       '#ff9ec7'],       // top-tier rim
-  [' .' + rep('~', 27) + '.',                 '#ff7fb0'],       // frosting drip
-  [' |' + center('HAPPY  BIRTHDAY', 27) + '|','#ffe08a'],       // message band
-  [' |' + rep(':', 27) + '|',                 '#e3a268'],       // sponge
-  ['.' + rep('_', 29) + '.',                  '#ff9ec7'],       // bottom-tier rim
-  ['|' + rep('~', 29) + '|',                  '#ff7fb0'],       // frosting drip
-  ['CHERRIES', '#e3a268'],                                      // cherry row (special)
-  ['|' + rep(':', 29) + '|',                  '#e3a268'],       // sponge
-  ["'" + rep('_', 29) + "'",                  '#caa6c9'],       // bottom edge
-  [' ' + rep('=', 29) + ' ',                  '#b9c2d0'],       // plate top
-  ['(' + rep('_', 29) + ')',                  '#8b94a6'],       // plate
-];
+// tiers: [yBottom, yTop, radius]
+const TIERS=[[-2.2,-1.0,2.4],[-1.0,0.1,1.7],[0.1,1.0,1.0]];
 
-// Candle bodies get individual colours; cherries are red dots on the tan band.
-const CANDLE_COLORS = ['#ff6b6b', '#6bc5ff', '#9bffb0', '#ffd166', '#c79bff'];
-
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function buildHTML() {
-  const lines = [];
-
-  // Flame row (animated): a <span class="flame"> at each candle column.
-  {
-    const cells = rep(' ', ROWW).split('');
-    FLAME_COLS.forEach((c, i) => { cells[c] = '\0' + i; });   // placeholder marker
-    lines.push(cells.map(ch => ch[0] === '\0'
-      ? `<span class="flame" data-f="${ch.slice(1)}">^</span>`
-      : esc(ch)).join(''));
+// tier side walls
+TIERS.forEach(([y0,y1,r],ti)=>{
+  for(let th=0; th<6.283; th+=0.13){
+    const ct=Math.cos(th), st=Math.sin(th);
+    for(let y=y0; y<=y1; y+=0.10){
+      // a little frosting "drip" highlight near the top lip of each wall
+      const drip = (y > y1-0.18) ? FROST : TIER_COLS[ti];
+      add(r*ct, y, r*st,  ct,0,st,  drip);
+    }
   }
+});
 
-  CAKE.forEach(([text, color], idx) => {
-    // Candle/wick row: colour each stick distinctly (already ROWW wide).
-    if (idx === 0) {
-      lines.push(text.split('').map((ch, x) => {
-        const ci = FLAME_COLS.indexOf(x);
-        return ci >= 0 ? `<span style="color:${CANDLE_COLORS[ci]}">|</span>` : esc(ch);
-      }).join(''));
-      return;
+// frosting rings (exposed tops where the next tier is narrower) + crown disk
+function disk(yTop, rInner, rOuter, baseCol, sprinkle){
+  for(let rr=rInner; rr<=rOuter; rr+=0.11){
+    for(let th=0; th<6.283; th+=0.13){
+      let col = baseCol;
+      if(sprinkle && Math.sin(rr*40.0+th*9.0) > 0.86)            // scattered sprinkles
+        col = SPRINKLE[((rr*7+th*3)|0) % SPRINKLE.length];
+      add(rr*Math.cos(th), yTop, rr*Math.sin(th),  0,1,0,  col);
     }
-    // Tan sponge band with red cherries dotted across it (already ROWW wide).
-    if (text === 'CHERRIES') {
-      const inner = rep(' ', 29).split('');
-      for (let c = 2; c < 29; c += 4) inner[c] = '*';
-      const html = inner.map(ch => ch === '*'
-        ? '<span style="color:#ff5d6c">o</span>'
-        : `<span style="color:#e3a268">${esc(ch)}</span>`).join('');
-      lines.push(`<span style="color:#e3a268">|</span>${html}<span style="color:#e3a268">|</span>`);
-      return;
-    }
-    lines.push(`<span style="color:${color}">${esc(padc(text))}</span>`);
-  });
-
-  return lines.join('\n');
-}
-
-art.innerHTML = buildHTML();
-
-// ---- flame flicker animation ----
-const FLAMES = ['^', '*', '.', '\'', ':', '^'];
-const flameEls = [...document.querySelectorAll('.flame')];
-function flicker() {
-  for (const el of flameEls) {
-    el.textContent = FLAMES[(Math.random() * FLAMES.length) | 0];
-    const h = 36 + Math.random() * 18;               // gold -> orange
-    el.style.color = `hsl(${h},100%,${58 + Math.random() * 14}%)`;
   }
 }
-setInterval(flicker, 110);
+disk(-1.0, 1.7, 2.4, FROST, true);   // bottom tier shoulder
+disk( 0.1, 1.0, 1.7, FROST, true);   // middle tier shoulder
+disk( 1.0, 0.0, 1.0, FROST, true);   // top crown
 
-// ---- confetti ----
-const cf = document.getElementById('cf'), cc = cf.getContext('2d');
-function rs(){ cf.width = innerWidth; cf.height = innerHeight; } addEventListener('resize', rs); rs();
-let bits = [];
-function burst(x, y){
-  const cols = ['#ff5f6d','#ffc371','#5ffbf1','#c79bff','#9bffb0','#ffd166'];
-  for (let i = 0; i < 130; i++) bits.push({
-    x, y, vx:(Math.random()*2-1)*7, vy:Math.random()*-9-2, g:.28+Math.random()*.12,
-    s:3+Math.random()*4, c:cols[(Math.random()*cols.length)|0], r:Math.random()*6, life:130
+// silver plate
+disk(-2.2, 0.0, 2.9, PLATE, false);
+
+// candles (striped) + flames, arranged in a ring on the crown
+const NC=5, CRING=0.6;
+for(let i=0;i<NC;i++){
+  const a=i/NC*6.283, cx=CRING*Math.cos(a), cz=CRING*Math.sin(a), col=CANDLE_COLS[i];
+  for(let y=1.0; y<=1.62; y+=0.07){
+    const stripe = (((y*7)|0)%2) ? [255,255,255] : col;   // candy-cane stripes
+    for(let th=0; th<6.283; th+=0.45){
+      const ct=Math.cos(th), st=Math.sin(th);
+      add(cx+0.085*ct, y, cz+0.085*st,  ct,0,st,  stripe);
+    }
+  }
+  // wick
+  add(cx, 1.66, cz, 0,1,0, [60,55,60]);
+  // flame: a small emissive cluster (flickers each frame)
+  for(let k=0;k<6;k++){
+    const fy=1.72+k*0.05, fr=0.07*(1-k/7);
+    const t=k/6*6.283;
+    add(cx+fr*Math.cos(t), fy, cz+fr*Math.sin(t), 0,1,0, [255,180,60], 1);
+  }
+  add(cx, 2.06, cz, 0,1,0, [255,150,40], 1);
+}
+
+const N = px.length;
+const FLAME_CH = "^*+'.°";
+
+// ---- per-frame render --------------------------------------------------------
+const zbuf = new Float32Array(W*H);
+const cidx = new Int32Array(W*H);   // index of point that won each cell (-1 = empty)
+const cbr  = new Float32Array(W*H); // resolved brightness 0..1 for that cell
+const cglyph = new Uint8Array(W*H); // glyph code: 0=use ramp, else flame glyph char code
+
+function render(A){
+  const cosA=Math.cos(A), sinA=Math.sin(A), cosB=Math.cos(TILT), sinB=Math.sin(TILT);
+  zbuf.fill(-Infinity); cidx.fill(-1);
+
+  for(let i=0;i<N;i++){
+    // spin about Y, then tilt about X
+    const x=px[i], y=py[i], z=pz[i];
+    const x1 = x*cosA + z*sinA;
+    const z1 = -x*sinA + z*cosA;
+    const y2 = y*cosB - z1*sinB;
+    const z2 = y*sinB + z1*cosB;
+    const x2 = x1;
+
+    const ooz = 1/(z2+K2);
+    const sx = (W/2 + K1X*ooz*x2)|0;
+    const sy = (H/2 - K1Y*ooz*y2)|0;
+    if(sx<0||sx>=W||sy<0||sy>=H) continue;
+    const o = sx + sy*W;
+    if(ooz <= zbuf[o]) continue;
+
+    // rotate the normal the same way to light in view space
+    const ax=nx[i], ay=ny[i], az=nz[i];
+    const ax1 = ax*cosA + az*sinA;
+    const az1 = -ax*sinA + az*cosA;
+    const ay2 = ay*cosB - az1*sinB;
+    const az2 = ay*sinB + az1*cosB;
+    let lum = ax1*L[0] + ay2*L[1] + az2*L[2];
+    lum = lum<0 ? 0 : lum;
+    const br = fl[i] ? 1 : 0.25 + 0.78*lum;   // ambient + diffuse (flames emissive)
+
+    zbuf[o]=ooz; cidx[o]=i; cbr[o]=br;
+    cglyph[o]= fl[i] ? 1 : 0;
+  }
+
+  // assemble HTML, grouping consecutive same-colour cells into one span
+  let out="", run="", runCol="";
+  const flush=()=>{ if(run){ out += runCol ? `<span style="color:${runCol}">${run}</span>` : run; run=""; } };
+  for(let yy=0; yy<H; yy++){
+    for(let xx=0; xx<W; xx++){
+      const o=xx+yy*W, i=cidx[o];
+      let ch=' ', col="";
+      if(i>=0){
+        const br=cbr[o];
+        if(cglyph[o]){                                   // flame: flicker glyph + hue
+          ch = FLAME_CH[(Math.random()*FLAME_CH.length)|0];
+          const h=30+Math.random()*22, l=58+Math.random()*16;
+          col=`hsl(${h.toFixed(0)},100%,${l.toFixed(0)}%)`;
+        } else {
+          ch = RAMP[Math.min(RAMP.length-1, (br*RAMP.length)|0)];
+          const r=(cr[i]*br)|0, g=(cg[i]*br)|0, b=(cb[i]*br)|0;
+          col=`rgb(${r},${g},${b})`;
+        }
+      }
+      if(col!==runCol){ flush(); runCol=col; }
+      run+=ch;
+    }
+    flush(); runCol=""; out+="\n";
+  }
+  art.innerHTML=out;
+}
+
+let ang=0, last=performance.now();
+function loop(t){
+  ang += (t-last)*0.0011;   // ~ steady spin, framerate independent
+  last=t;
+  render(ang);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---- confetti (click anywhere) ----------------------------------------------
+const cf=document.getElementById('cf'), cc=cf.getContext('2d');
+function rs(){ cf.width=innerWidth; cf.height=innerHeight; } addEventListener('resize',rs); rs();
+let bits=[];
+function burst(x,y){
+  const cols=['#ff5f6d','#ffc371','#5ffbf1','#c79bff','#9bffb0','#ffd166'];
+  for(let i=0;i<130;i++) bits.push({
+    x,y,vx:(Math.random()*2-1)*7,vy:Math.random()*-9-2,g:.28+Math.random()*.12,
+    s:3+Math.random()*4,c:cols[(Math.random()*cols.length)|0],r:Math.random()*6,life:130
   });
 }
-function tick(){
+function ctick(){
   cc.clearRect(0,0,cf.width,cf.height);
-  bits = bits.filter(b => b.life-- > 0);
-  for (const b of bits){
-    b.vy += b.g; b.x += b.vx; b.y += b.vy; b.r += .18;
-    cc.save(); cc.translate(b.x, b.y); cc.rotate(b.r);
-    cc.fillStyle = b.c; cc.globalAlpha = Math.max(0, b.life/130);
-    cc.fillRect(-b.s/2, -b.s/2, b.s, b.s*1.6); cc.restore();
+  bits=bits.filter(b=>b.life-->0);
+  for(const b of bits){
+    b.vy+=b.g; b.x+=b.vx; b.y+=b.vy; b.r+=.18;
+    cc.save(); cc.translate(b.x,b.y); cc.rotate(b.r);
+    cc.fillStyle=b.c; cc.globalAlpha=Math.max(0,b.life/130);
+    cc.fillRect(-b.s/2,-b.s/2,b.s,b.s*1.6); cc.restore();
   }
-  cc.globalAlpha = 1; requestAnimationFrame(tick);
+  cc.globalAlpha=1; requestAnimationFrame(ctick);
 }
-tick();
-addEventListener('click', e => burst(e.clientX, e.clientY));
-setTimeout(() => burst(innerWidth/2, innerHeight*.42), 500);
-setInterval(() => burst(Math.random()*innerWidth, innerHeight*.3), 2800);
+ctick();
+addEventListener('click',e=>burst(e.clientX,e.clientY));
+setTimeout(()=>burst(innerWidth/2,innerHeight*.42),500);
+setInterval(()=>burst(Math.random()*innerWidth,innerHeight*.3),2800);
 </script>
 </body>
 </html>
